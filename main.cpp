@@ -14,7 +14,7 @@ class ColorNode {
         Vec2i pLeft, pRight;
         ColorNode *pNext;
         
-        int idxL, idxR;
+        int idRow, idxL, idxR;
         float gradMax, gradMin;
 
         ColorNode() {
@@ -26,15 +26,24 @@ class ColorNode {
             this->gradMin = numeric_limits<float>::min();
             this->pNext = NULL;
             this->color = Vec3b(0,0,0);
+            this->idRow = 0;
+        }
+
+        void setColor(uchar a, uchar b, uchar c) {
+            this->color[0] = a;
+            this->color[1] = b;
+            this->color[2] = c;
         }
 };
 
 class ImpressedImg {
     public:
         ColorNode* head;
+        int idRow;
 
         ImpressedImg() {
             this->head = new ColorNode();
+            this->idRow = 0;
         }
 
         ~ImpressedImg() {
@@ -63,61 +72,65 @@ bool isSameColor(Vec3b c1, Vec3b c2) {
 
 void process(Mat &inImg, Mat &outImg) {
     
-    unsigned char* imgData = (unsigned char*)(inImg.data);
-    int size = inImg.rows*inImg.cols;
+    uchar* imgData = (uchar*)(inImg.data);
     Vec3b cc;
 
     ImpressedImg* l1 = new ImpressedImg();
     ImpressedImg* l2 = new ImpressedImg();
     ImpressedImg* tm;
 
+    l1->idRow = -1;
+    l2->idRow = 0;
+
     ColorNode* cl1 = l1->head;
     ColorNode* cl2 = l2->head;
 
-    for (int i = 0, it = 0, fr = 0; i < size; ++i) {
-        cc[0] = imgData[it++];
-        cc[1] = imgData[it++];
-        cc[2] = imgData[it++];
+    cl2->setColor(imgData[0], imgData[1], imgData[2]);
 
-        if (isSameColor(cc, cl2->color)) {
-            cl2->idxR = fr;
-        } else if (cl2->idxL == fr) {
-            cl2->idxR = fr;
-            cl2->color = cc;
-        } else { 
-            while (cl1 != NULL && cl1->idxR < cl2->idxL) {
-                cl1 = cl1->pNext;
-            }
-            while (cl1 != NULL && cl1->idxR < cl2->idxR && !isSameColor(cl1->color, cl2->color)) {
-                cl1 = cl1->pNext;
-            }
+    for (int iRow = 0, it = 0; iRow < inImg.rows; ++iRow) {
+        for (int jCol = 0; jCol < inImg.cols; ++jCol) {
+            cc[0] = imgData[it++];
+            cc[1] = imgData[it++];
+            cc[2] = imgData[it++];
 
-            if (cl1 == NULL) {
-                // add vertices to the result
-            } else if (isSameColor(cl1->color, cl2->color)) {
-                // stranfer parent points from l1
-            } else {
-                // add vertices to the result
-            }
+            if (isSameColor(cc, cl2->color)) {
+                cl2->idxR = jCol;
+            } else { 
+                while (cl1 != NULL && cl1->idRow == l1->idRow && cl1->idxR < cl2->idxL) {
+                    cl1 = cl1->pNext;
+                }
+                while (cl1 != NULL && cl1->idRow == l1->idRow && cl1->idxR < cl2->idxR && !isSameColor(cl1->color, cl2->color)) {
+                    cl1 = cl1->pNext;
+                }
 
-            // update new color
-            if (cl2->pNext == NULL) {
-                cl2 ->pNext = new ColorNode();
-            }
+                if (cl1 != NULL && cl1->idRow == l1->idRow && isSameColor(cl1->color, cl2->color)) {
+                    // stranfer parent points from l1
 
-            cl2 = cl2->pNext;
-            cl2->idxL = cl2->idxR = fr;
-            cl2->color = cc;
+                } else {
+                    // add vertices to the result
+                }
+
+                // update new color
+                if (cl2->pNext == NULL) {
+                    cl2 ->pNext = new ColorNode();
+                    cl2->idRow = l2->idRow;
+                }
+
+                cl2 = cl2->pNext;
+                cl2->idxL = cl2->idxR = jCol;
+                cl2->color = cc;
+            }
         }
 
         // end row
-        if (++fr == inImg.cols) {
-            fr = 0;
-            swap(l1, l2);
+        swap(l1, l2);
 
-            // reset head node
-            cl1 = l1->head;
-            cl2 = l2->head;
+        // reset head node
+        cl1 = l1->head;
+        cl2 = l2->head;
+        if (iRow + 1 < inImg.rows) {
+            cl2->idRow = l2->idRow = l1->idRow + 1;
+            cl2->setColor(imgData[it], imgData[it + 1], imgData[it + 2]);
         }
     }
 }   
