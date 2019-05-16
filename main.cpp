@@ -8,7 +8,7 @@ const double ALPHA_J = 1;
 const int ALPHA_COLOR = 50;
 const double EPSILON = 1e-6;
 
-class ColorNode {
+class TriangleImage {
     class Gradient {
         public:
             float gmax, gmin;
@@ -18,7 +18,6 @@ class ColorNode {
                 this->gmin = numeric_limits<float>::min();
             }
     };
-
     class Side {
         public:
             Vec2i point;
@@ -30,20 +29,22 @@ class ColorNode {
                 this->grad.resetGradient();
             }
 
-            void setPointLeft(int x, int y) {
+            void setPoint(int x, int y) {
                 this->point[0] = x;
                 this->point[1] = y;
             }
     };
-
+    class ColorNode {
     public:
         Vec3b color;
         ColorNode *pNext;
-        Side leftSide, rightSide;
+        Side *leftSide, *rightSide;
         int idRow;
 
         ColorNode() {
             // reset to first column
+            this->leftSide = new Side();
+            this->rightSide = new Side();
             this->pNext = NULL;
             this->color = Vec3b(0,0,0);
             this->idRow = 0;
@@ -82,7 +83,6 @@ class ImpressedImg {
         }
 };
 
-class TriangleImage {
     protected:
         ImpressedImg *l1, *l2; 
         ColorNode *cl1, *cl2; 
@@ -106,14 +106,6 @@ class TriangleImage {
             this->l2->~ImpressedImg();
         }
 
-        void init() {
-            l1->idRow = -1;
-            l2->idRow = 0;
-
-            ColorNode* cl1 = l1->head;
-            ColorNode* cl2 = l2->head;
-        }
-
         inline bool isSameColor(Vec3b c1, Vec3b c2) {
             if (c1[0] == c2[0]) {
                 return true;
@@ -124,82 +116,80 @@ class TriangleImage {
 
         }
 
-        bool updatePoint(int iRow) {
-            if (this->cl1->pLeft[1] > this->cl2->idxL) {
-                this->cl2->gradLeft.gmin = max(this->cl1->gradLeft.gmin, ((this->cl2->idxL - this->delta) - this->cl1->pLeft[1])/((iRow - this->delta) - this->cl1->pLeft[0]));
-                this->cl2->gradLeft.gmax = min(this->cl1->gradLeft.gmax, ((this->cl2->idxL + this->delta) - this->cl1->pLeft[1])/((iRow + this->delta) - this->cl1->pLeft[0]));
-
-                if (this->cl2->gradLeft.gmin <= this->cl2->gradLeft.gmax) {
-
-                    return false;
-                }
-            } else if (this->cl1->pLeft[1] < this->cl2->idxL) {
-                this->cl2->gradLeft.gmin = max(this->cl1->gradLeft.gmin, ((this->cl2->idxL - this->delta) - this->cl1->pLeft[1])/((iRow + this->delta) - this->cl1->pLeft[0]));
-                this->cl2->gradLeft.gmax = min(this->cl1->gradLeft.gmax, ((this->cl2->idxL + this->delta) - this->cl1->pLeft[1])/((iRow - this->delta) - this->cl1->pLeft[0]));
-
-                if (this->cl2->gradLeft.gmin <= this->cl2->gradLeft.gmax) {
-                        
-                    return false;
-                }
+        bool updatePoint(int iRow, Side *l1Side, Side *l2Side) {
+            if (l1Side->point[1] > l2Side->idx) {
+                l2Side->grad.gmin = max(l1Side->grad.gmin, ((l2Side->idx - this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
+                l2Side->grad.gmax = min(l1Side->grad.gmax, ((l2Side->idx + this->delta) - l1Side->point[1])/((iRow + this->delta) - l1Side->point[0]));
+            } else if (l1Side->point[1] < l2Side->idx) {
+                l2Side->grad.gmin = max(l1Side->grad.gmin, ((l2Side->idx - this->delta) - l1Side->point[1])/((iRow + this->delta) - l1Side->point[0]));
+                l2Side->grad.gmax = min(l1Side->grad.gmax, ((l2Side->idx + this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
             } else {
-                this->cl2->gradLeft.gmin = max(this->cl1->gradLeft.gmin, ((this->cl2->idxL - this->delta) - this->cl1->pLeft[1])/((iRow - this->delta) - this->cl1->pLeft[0]));
-                this->cl2->gradLeft.gmax = min(this->cl1->gradLeft.gmax, ((this->cl2->idxL + this->delta) - this->cl1->pLeft[1])/((iRow - this->delta) - this->cl1->pLeft[0]));
-
-                if (this->cl2->gradLeft.gmin <= this->cl2->gradLeft.gmax) {
-                        
-                    return false;
-                }
+                l2Side->grad.gmin = max(l1Side->grad.gmin, ((l2Side->idx - this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
+                l2Side->grad.gmax = min(l1Side->grad.gmax, ((l2Side->idx + this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
             }
 
-            this->cl2->setPointLeft(iRow, cl2->idxL);
-            this->cl2->gradLeft.resetGradient();
+            if (l2Side->grad.gmin <= l2Side->grad.gmax) {
 
-            return true;
+                return true;
+            }
+
+            l2Side->setPoint(iRow, l2Side->idx);
+            l2Side->grad.resetGradient();
+
+            return false;
         }
 
         void process(Mat &inImg, Mat &outImg) {
             uchar* imgData = (uchar*)(inImg.data);
-            cl2->setColor(imgData[0], imgData[1], imgData[2]);
-            this->init();
+            this->cl2->setColor(imgData[0], imgData[1], imgData[2]);
+            this->l1->idRow = -1;
 
-            for (int iRow = 0, jCol = 0, it = 0; iRow < inImg.rows; ++iRow, jCol = 0) {
-                for (; jCol < inImg.cols; ++jCol) {
-                    this->setColor(imgData[it++], imgData[it++], imgData[it++]);
+            for (int iRow = 0, jCol = 0, it = 0; iRow < inImg.rows; ++iRow, jCol = 0, swap(l1, l2)) {
+                // reset head node
+                this->cl1 = this->l1->head;
+                this->cl2 = this->l2->head;
 
-                    if (isSameColor(this->color, cl2->color)) {
-                        cl2->idxR = jCol;
+                this->cl2->idRow = this->l2->idRow = iRow;
+                this->cl2->setColor(imgData[it], imgData[it + 1], imgData[it + 2]);
+                
+                for (; jCol < inImg.cols; ++jCol, it += 3) {
+                    this->setColor(imgData[it], imgData[it + 1], imgData[it + 2]);
+
+                    if (isSameColor(this->color, this->cl2->color)) {
+                        this->cl2->rightSide->idx = jCol;
                     } else { 
-                        while (cl1 != NULL && cl1->idRow == l1->idRow && cl1->idxR < cl2->idxL) {
-                            cl1 = cl1->pNext;
+                        while (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && this->cl1->rightSide->idx < this->cl2->leftSide->idx) {
+                            this->cl1 = this->cl1->pNext;
                         }
-                        while (cl1 != NULL && cl1->idRow == l1->idRow && cl1->idxR < cl2->idxR && !isSameColor(cl1->color, cl2->color)) {
-                            cl1 = cl1->pNext;
+                        while (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && this->cl1->rightSide->idx < this->cl2->leftSide->idx && !isSameColor(this->cl1->color, this->cl2->color)) {
+                            this->cl1 = this->cl1->pNext;
                         }
 
-                        if (cl1 != NULL && cl1->idRow == l1->idRow && isSameColor(cl1->color, cl2->color)) {
+                        if (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && isSameColor(this->cl1->color, this->cl2->color)) {
                             // stranfer parent points from l1
                             // calculate new gradient
                             // valuate the left point
-                            this->updateLeftPoint(iRow);
+                            this->updatePoint(iRow, this->cl1->leftSide, this->cl2->leftSide);
 
                             // valuate the right point
-                            this->updateRightPoint(iRow);
+                            this->updatePoint(iRow, this->cl1->rightSide, this->cl2->rightSide);
                         } else {
                             // add vertices to the result
-                            cl2->setPointLeft(iRow, cl2->idxL);
-                            cl2->setPointRight(iRow, cl2->idxR);
-                            cl2->resetGradient();
+                            this->cl2->leftSide->setPoint(iRow, this->cl2->leftSide->idx);
+                            this->cl2->rightSide->setPoint(iRow, this->cl2->rightSide->idx);
+                            this->cl2->leftSide->resetGradient();
+                            this->cl2->rightSide->resetGradient();
                         }
 
                         // update new color
-                        if (cl2->pNext == NULL) {
-                            cl2 ->pNext = new ColorNode();
+                        if (this->cl2->pNext == NULL) {
+                            this->cl2->pNext = new ColorNode();
                         }
 
-                        cl2 = cl2->pNext;
-                        cl2->idRow = l2->idRow;
-                        cl2->idxL = cl2->idxR = jCol;
-                        cl2->setColor(this->color);
+                        this->cl2 = this->cl2->pNext;
+                        this->cl2->idRow = this->l2->idRow;
+                        this->cl2->leftSide->idx = this->cl2->rightSide->idx = jCol;
+                        this->cl2->setColor(this->color);
                     }
                 }
 
@@ -208,17 +198,6 @@ class TriangleImage {
                     iRow,
 
                 );
-
-                // end row
-                swap(l1, l2);
-
-                // reset head node
-                cl1 = l1->head;
-                cl2 = l2->head;
-                if (iRow + 1 < inImg.rows) {
-                    cl2->idRow = l2->idRow = l1->idRow + 1;
-                    cl2->setColor(imgData[it], imgData[it + 1], imgData[it + 2]);
-                }
             }
         }
 };
@@ -232,13 +211,12 @@ void readImage(Mat &image, const string &path) {
 }
 
 int main(int argc, char* argv[]) {
-
+    TriangleImage triangleImg;
     string imageName;
     Mat inImg, outImg;
 
     readImage(inImg, argv[1]);
-    process(inImg, outImg);
-
+    triangleImg.process(inImg, outImg);
     imwrite(argv[2], outImg);
 
     return 0;
