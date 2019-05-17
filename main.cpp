@@ -4,9 +4,7 @@
 using namespace std;
 using namespace cv;
 
-const double ALPHA_J = 1;
-const int ALPHA_COLOR = 50;
-const double EPSILON = 1e-6;
+const int ALPHA_J = 1;
 
 class TriangleImage {
     class Gradient {
@@ -23,10 +21,17 @@ class TriangleImage {
             Vec2i point;
             int idx;
             Gradient grad;
+            bool isConnected;
 
             Side() {
+                this->isConnected = false;
                 this->idx = 0;
                 this->grad.resetGradient();
+            }
+
+            void setPoint(Vec2i p) {
+                this->point[0] = p[0];
+                this->point[1] = p[1];
             }
 
             void setPoint(int x, int y) {
@@ -113,23 +118,41 @@ class ImpressedImg {
         }
 
         void updateNewColor(int iRow, int jCol) {
+            // valuate the left point
+            this->valuatePoints(iRow, this->cl1->leftSide, this->cl2->leftSide);            
 
+            // valuate the right point
+            this->valuatePoints(iRow, this->cl1->rightSide, this->cl2->rightSide);
+
+            // update new color
+            if (this->cl2->pNext == NULL) {
+                this->cl2->pNext = new ColorNode();
+            }
+
+            this->cl2 = this->cl2->pNext;
+            this->cl2->idRow = this->l2->idRow;
+            this->cl2->leftSide->idx = this->cl2->rightSide->idx = jCol;
+            this->cl2->setColor(this->color);
+        }
+
+        void calcGradient(int iRow, Side *s1, Side* s2) {
+            if (s1->point[1] > s2->idx) {
+                s2->grad.gmin = max(s1->grad.gmin, ((s2->idx - this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+                s2->grad.gmax = min(s1->grad.gmax, ((s2->idx + this->delta) - s1->point[1])/((iRow + this->delta) - s1->point[0]));
+            } else if (s1->point[1] < s2->idx) {
+                s2->grad.gmin = max(s1->grad.gmin, ((s2->idx - this->delta) - s1->point[1])/((iRow + this->delta) - s1->point[0]));
+                s2->grad.gmax = min(s1->grad.gmax, ((s2->idx + this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+            } else {
+                s2->grad.gmin = max(s1->grad.gmin, ((s2->idx - this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+                s2->grad.gmax = min(s1->grad.gmax, ((s2->idx + this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+            }
         }
 
         bool updatePoint(int iRow, Side *l1Side, Side *l2Side) {
-            if (l1Side->point[1] > l2Side->idx) {
-                l2Side->grad.gmin = max(l1Side->grad.gmin, ((l2Side->idx - this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
-                l2Side->grad.gmax = min(l1Side->grad.gmax, ((l2Side->idx + this->delta) - l1Side->point[1])/((iRow + this->delta) - l1Side->point[0]));
-            } else if (l1Side->point[1] < l2Side->idx) {
-                l2Side->grad.gmin = max(l1Side->grad.gmin, ((l2Side->idx - this->delta) - l1Side->point[1])/((iRow + this->delta) - l1Side->point[0]));
-                l2Side->grad.gmax = min(l1Side->grad.gmax, ((l2Side->idx + this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
-            } else {
-                l2Side->grad.gmin = max(l1Side->grad.gmin, ((l2Side->idx - this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
-                l2Side->grad.gmax = min(l1Side->grad.gmax, ((l2Side->idx + this->delta) - l1Side->point[1])/((iRow - this->delta) - l1Side->point[0]));
-            }
-
+            this->calcGradient(iRow, l1Side, l2Side);
             if (l2Side->grad.gmin <= l2Side->grad.gmax) {
-
+                l1Side->isConnected = true;
+                l2Side->setPoint(l1Side->point);
                 return true;
             }
 
@@ -137,6 +160,19 @@ class ImpressedImg {
             l2Side->grad.resetGradient();
 
             return false;
+        }
+
+        void valuatePoints(int iRow, Side *l1Side, Side *l2Side) {
+            while (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && l1Side->idx - ALPHA_J <= l2Side->idx && !isSameColor(this->cl1->color, this->cl2->color)) {
+                this->cl1 = this->cl1->pNext;
+            }
+
+            if (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && isSameColor(this->cl1->color, this->cl2->color)) {
+                this->updatePoint(iRow, l1Side, l2Side);
+            } else {
+                l2Side->setPoint(iRow, l2Side->idx);
+                l2Side->grad.resetGradient();
+            }
         }
 
         void process(Mat &inImg, Mat &outImg) {
@@ -158,46 +194,12 @@ class ImpressedImg {
                     if (isSameColor(this->color, this->cl2->color)) {
                         this->cl2->rightSide->idx = jCol;
                     } else { 
-                        while (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && this->cl1->rightSide->idx < this->cl2->leftSide->idx) {
-                            this->cl1 = this->cl1->pNext;
-                        }
-                        while (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && this->cl1->rightSide->idx < this->cl2->leftSide->idx && !isSameColor(this->cl1->color, this->cl2->color)) {
-                            this->cl1 = this->cl1->pNext;
-                        }
-
-                        if (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && isSameColor(this->cl1->color, this->cl2->color)) {
-                            // stranfer parent points from l1
-                            // calculate new gradient
-                            // valuate the left point
-                            this->updatePoint(iRow, this->cl1->leftSide, this->cl2->leftSide);
-
-                            // valuate the right point
-                            this->updatePoint(iRow, this->cl1->rightSide, this->cl2->rightSide);
-                        } else {
-                            // add vertices to the result
-                            this->cl2->leftSide->setPoint(iRow, this->cl2->leftSide->idx);
-                            this->cl2->rightSide->setPoint(iRow, this->cl2->rightSide->idx);
-                            this->cl2->leftSide->resetGradient();
-                            this->cl2->rightSide->resetGradient();
-                        }
-
-                        // update new color
-                        if (this->cl2->pNext == NULL) {
-                            this->cl2->pNext = new ColorNode();
-                        }
-
-                        this->cl2 = this->cl2->pNext;
-                        this->cl2->idRow = this->l2->idRow;
-                        this->cl2->leftSide->idx = this->cl2->rightSide->idx = jCol;
-                        this->cl2->setColor(this->color);
+                        this->updateNewColor(iRow, jCol);        
                     }
                 }
 
                 // update vertices for the last color node in l2
-                this->updateNewColor(
-                    iRow,
-
-                );
+                this->updateNewColor(iRow, jCol);
             }
         }
 };
