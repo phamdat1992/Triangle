@@ -1,468 +1,225 @@
 #include <bits/stdc++.h>
 #include <opencv2/opencv.hpp>
 
-
 using namespace std;
 using namespace cv;
 
-const double pi = acos(-1.0);
-const double APLHA_GRADIENT = pi/10;
-const double ALPHA_J = 1;
-const int ALPHA_COLOR = 50;
-const int LSIDE = 1;
-const int RSIDE = 10;
-const double EPSILON = 1e-15;
+const int ALPHA_J = 1;
 
-class LinkedListNode {
-    private:
-        /*
-            Mỗi nút lưu lại màu, kiểm soát cột l -> r, 
-            có 2 hệ số góc tương ứng Left, Right và
-            số thứ tự đa giác chứa nút này
-        */
-        Vec3b color;
-        int l, r;
-        double gradientL, gradientR;
-        int ind;
+class TriangleImage {
+    class Gradient {
+        public:
+            float gmax, gmin;
 
-        double minGradientL, maxGradientL;
-        double minGradientR, maxGradientR;
+            void resetGradient() {
+                this->gmax = numeric_limits<float>::max();
+                this->gmin = numeric_limits<float>::min();
+            }
+    };
+    class Side {
+        public:
+            Vec2i point;
+            int idx;
+            Gradient grad;
+            bool isConnected;
 
-        
+            Side() {
+                this->isConnected = false;
+                this->idx = 0;
+                this->grad.resetGradient();
+            }
 
+            void setPoint(Vec2i p) {
+                this->point[0] = p[0];
+                this->point[1] = p[1];
+            }
+
+            void setPoint(int x, int y) {
+                this->point[0] = x;
+                this->point[1] = y;
+            }
+    };
+    class ColorNode {
     public:
-        LinkedListNode *next;
-        Point upLeft, upRight;
-
-        LinkedListNode() {
-            this->l = -1;
-            this->r = -1;
-            this->gradientL = -100.0;
-            this->gradientR = -100.0;
-            this->next = NULL;
-            this->upLeft = this->upRight = Point(-1, -1);
-            this->color = Vec3b(0,0,0);
-            this->ind = -1;
-            this->minGradientL = this->minGradientR = 1000.0;
-            this->maxGradientL = this->maxGradientR = -1000.0;
-        }
-        LinkedListNode(int _l, int _r, Vec3b _color, LinkedListNode *link) {
-            this->l = _l;
-            this->r = _r;
-            this->color = _color;
-            this->next = link;
-            this->upLeft = this->upRight = Point(-1, -1);
-            this->gradientL = -100.0;
-            this->gradientR = -100.0;
-            this->ind = -1;
-            this->minGradientL = this->minGradientR = 1000.0;
-            this->maxGradientL = this->maxGradientR = -1000.0;
-        }
-
-        void printLinkedList() {
-            for(LinkedListNode *p = this; p != NULL; p = p->next)
-                cout<< p->getLeft() <<' '<< p->getRight() <<' '<< p->getInd() <<endl;
-            cout<< "END" <<endl;
-        }   
-
-        /*
-            Getter && Setter
-        */
-        void setLeft(int _l) {
-            this->l = _l;
-        }
-
-        int getLeft() {
-            return this->l;
-        }
-
-        void setRight(int _r) {
-            this->r = _r;
-        }
-        
-        int getRight() {
-            return this->r;
-        }
-
-        void setGradientL(double gradientL) {
-            this->gradientL = gradientL;
-        }
-
-        double getGradientL() {
-            return this->gradientL;
-        }
-
-        void setGradientR(double gradientR) {
-            this->gradientR = gradientR;
-        }
-
-        double getGradientR() {
-            return this->gradientR;
-        }
-
-        void setInd(int ind) {
-            this->ind = ind;
-        }
-
-        int getInd() {
-            return this->ind;
-        }
-
-        void setColor(Vec3b color) {
-            this->color = color;
-        } 
-
-        Vec3b getColor() {
-            return this->color;
-        }
-
-        void setMaxGradientRight(double maxGradientR) {
-            this->maxGradientR = maxGradientR;
-        }
-
-        double getMaxGradientRight() {
-            return this->maxGradientR;
-        }
-
-        void setMinGradientRight(double minGradientR) {
-            this->minGradientR = minGradientR;
-        }
-
-        double getMinGradientRight() {
-            return this->minGradientR;
-        }
-
-        void setMaxGradientLeft(double maxGradientL) {
-            this->maxGradientL = maxGradientL;
-        }
-
-        double getMaxGradientLeft() {
-            return this->maxGradientL;
-        }
-
-        void setMinGradientLeft(double minGradientL) {
-            this->minGradientL = minGradientL;
-        }
-
-        double getMinGradientLeft() {
-            return this->minGradientL;
-        }
-
-
-
-} *head = NULL, *current = NULL;
-
-class Pixels {
-    private:
-        int x, y;
         Vec3b color;
-    public: 
-        Pixels() {
-            this->x = 0;
-            this->y = 0;
+        ColorNode *pNext;
+        Side *leftSide, *rightSide;
+        int idRow;
+
+        ColorNode() {
+            // reset to first column
+            this->leftSide = new Side();
+            this->rightSide = new Side();
+            this->pNext = NULL;
             this->color = Vec3b(0,0,0);
-        }
-        Pixels(int _posx, int _posy, Vec3b _color) {
-            this->x = _posx;
-            this->y = _posy;
-            this->color = _color;
+            this->idRow = 0;
         }
 
-        Vec3b getColor() {
-            return this->color;
+        void setColor(uchar a, uchar b, uchar c) {
+            this->color[0] = a;
+            this->color[1] = b;
+            this->color[2] = c;
         }
 
-        void setColor(Vec3b color) {
-            this->color = color;
+        void setColor(Vec3b &cc) {
+            this->color[0] = cc[0];
+            this->color[1] = cc[1];
+            this->color[2] = cc[2];
         }
 };
 
+class ImpressedImg {
+    public:
+        ColorNode* head;
+        int idRow;
 
-string imageName;
-Mat image, imgwrite;
-int m, n;
-Pixels a[1000][1000];
-vector<Point> vPointL[100000], vPointR[100000];
+        ImpressedImg() {
+            this->head = new ColorNode();
+            this->idRow = 0;
+        }
 
-void init() {
-    image = imread(imageName, CV_LOAD_IMAGE_COLOR);
-    //imwrite("out2.png", image);
+        ~ImpressedImg() {
+            ColorNode* cur = head;
+            while (this->head != NULL) {
+                cur = head->pNext;
+                delete head;
+                head = cur;
+            }
+        }
+};
 
-    //cout<< atan2(3, -2) <<' '<< atan2(4, -2) <<endl;
+    protected:
+        ImpressedImg *l1, *l2; 
+        ColorNode *cl1, *cl2; 
+        Vec3b color; 
+        float delta;
+    public:
+        inline void setColor(uchar a, uchar b, uchar c) {
+            this->color[0] = a;
+            this->color[1] = b;
+            this->color[2] = c;
+        }
+
+        TriangleImage() {
+            this->delta = 0.5f;
+            this->l1 = new ImpressedImg();
+            this->l2 = new ImpressedImg();
+        }
+
+        ~TriangleImage() {
+            this->l1->~ImpressedImg();
+            this->l2->~ImpressedImg();
+        }
+
+        inline bool isSameColor(Vec3b c1, Vec3b c2) {
+            if (c1[0] == c2[0]) {
+                return true;
+            }
+        }
+
+        void updateNewColor(int iRow, int jCol) {
+            // valuate the left point
+            this->valuatePoints(iRow, this->cl1->leftSide, this->cl2->leftSide);            
+
+            // valuate the right point
+            this->valuatePoints(iRow, this->cl1->rightSide, this->cl2->rightSide);
+
+            // update new color
+            if (this->cl2->pNext == NULL) {
+                this->cl2->pNext = new ColorNode();
+            }
+
+            this->cl2 = this->cl2->pNext;
+            this->cl2->idRow = this->l2->idRow;
+            this->cl2->leftSide->idx = this->cl2->rightSide->idx = jCol;
+            this->cl2->setColor(this->color);
+        }
+
+        void calcGradient(int iRow, Side *s1, Side* s2) {
+            if (s1->point[1] > s2->idx) {
+                s2->grad.gmin = max(s1->grad.gmin, ((s2->idx - this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+                s2->grad.gmax = min(s1->grad.gmax, ((s2->idx + this->delta) - s1->point[1])/((iRow + this->delta) - s1->point[0]));
+            } else if (s1->point[1] < s2->idx) {
+                s2->grad.gmin = max(s1->grad.gmin, ((s2->idx - this->delta) - s1->point[1])/((iRow + this->delta) - s1->point[0]));
+                s2->grad.gmax = min(s1->grad.gmax, ((s2->idx + this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+            } else {
+                s2->grad.gmin = max(s1->grad.gmin, ((s2->idx - this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+                s2->grad.gmax = min(s1->grad.gmax, ((s2->idx + this->delta) - s1->point[1])/((iRow - this->delta) - s1->point[0]));
+            }
+        }
+
+        bool updatePoint(int iRow, Side *l1Side, Side *l2Side) {
+            this->calcGradient(iRow, l1Side, l2Side);
+            if (l2Side->grad.gmin <= l2Side->grad.gmax) {
+                l1Side->isConnected = true;
+                l2Side->setPoint(l1Side->point);
+                return true;
+            }
+
+            l2Side->setPoint(iRow, l2Side->idx);
+            l2Side->grad.resetGradient();
+
+            return false;
+        }
+
+        void valuatePoints(int iRow, Side *l1Side, Side *l2Side) {
+            while (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && l1Side->idx - ALPHA_J <= l2Side->idx && !isSameColor(this->cl1->color, this->cl2->color)) {
+                this->cl1 = this->cl1->pNext;
+            }
+
+            if (this->cl1 != NULL && this->cl1->idRow == this->l1->idRow && isSameColor(this->cl1->color, this->cl2->color)) {
+                this->updatePoint(iRow, l1Side, l2Side);
+            } else {
+                l2Side->setPoint(iRow, l2Side->idx);
+                l2Side->grad.resetGradient();
+            }
+        }
+
+        void process(Mat &inImg, Mat &outImg) {
+            uchar* imgData = (uchar*)(inImg.data);
+            this->cl2->setColor(imgData[0], imgData[1], imgData[2]);
+            this->l1->idRow = -1;
+
+            for (int iRow = 0, jCol = 0, it = 0; iRow < inImg.rows; ++iRow, jCol = 0, swap(l1, l2)) {
+                // reset head node
+                this->cl1 = this->l1->head;
+                this->cl2 = this->l2->head;
+
+                this->cl2->idRow = this->l2->idRow = iRow;
+                this->cl2->setColor(imgData[it], imgData[it + 1], imgData[it + 2]);
+                
+                for (; jCol < inImg.cols; ++jCol, it += 3) {
+                    this->setColor(imgData[it], imgData[it + 1], imgData[it + 2]);
+
+                    if (isSameColor(this->color, this->cl2->color)) {
+                        this->cl2->rightSide->idx = jCol;
+                    } else { 
+                        this->updateNewColor(iRow, jCol);        
+                    }
+                }
+
+                // update vertices for the last color node in l2
+                this->updateNewColor(iRow, jCol);
+            }
+        }
+};
+
+void readImage(Mat &image, const string &path) {
+    image = imread(path, CV_LOAD_IMAGE_COLOR);
+
     if (image.empty()) {
         cout<< "Image not found" <<endl;
-        cin.get();
-        return;
-    }
-
-    m = image.rows;
-    n = image.cols;
-
-
-    imgwrite = Mat::zeros(m, n, CV_8UC3);
-    
-    for(int i = 0; i < m; ++i)
-        for(int j = 0; j < n; ++j) {
-            Vec3b color = image.at<Vec3b>(i, j);
-            if (color.val[0] != 255 || color.val[1] != 255 || color.val[2] != 255)
-                color = Vec3b(0, 0, 0);
-            a[i][j] = Pixels(i, j, color);
-        }
-}
-
-LinkedListNode* insertLinkedListNode(LinkedListNode *head, int l, int r, Vec3b color) {
-    LinkedListNode *node = new LinkedListNode(l,r,color, head);
-    return node;
-}
-
-double gradient(Point2d A, Point2d Origin) {
-    double x = A.x - Origin.x, y = A.y - Origin.y;
-    return atan2((double) x, (double) y);
-}
-
-double computeJ(int i, double gradient) {
-    return (double) i / tan(gradient);
-}
-
-bool is_same_color(Vec3b c1, Vec3b c2) {
-    for(int i = 0; i < 3; ++i)
-    if (abs(c1.val[i] - c2.val[i]) > ALPHA_COLOR) return false;
-    return true;
-}
-
-void colored(Point p, Vec3b color) {
-    imgwrite.at<Vec3b>(p.x, p.y) = color;
-}
-
-void eraseColor(Point p) {
-    imgwrite.at<Vec3b>(p.x, p.y) = Vec3b(0, 0, 0);
-}
-
-void updateIndPolygon(int i, LinkedListNode *l1Head, LinkedListNode *l2Head) {
-
-    /*
-        Do cài đặt bằng LinkedList nên các đoạn màu được duyệt từ 
-        phải qua trái   
-    */
-
-    LinkedListNode *l1 = l1Head, *l2 = l2Head;
-    while(l2 != NULL) {
-            while(l1 != NULL) {
-                /*
-                    Nếu 2 đoạn màu không trùng nhau thì
-                    set đoạn màu ở List 2 vào đa giác mới
-                */
-
-                if (l1->getRight() < l2->getLeft()) {
-                    break;
-                }
-
-                /* 
-                    Nếu đoạn màu ở List 1 nằm bên phải đoạn màu ở List 2 
-                    và 2 đoạn này không giao nhau thì xét đoạn tiếp theo trong List 1
-                */
-                while(l1->getLeft() > l2->getRight() && l1->next != NULL) {
-                    l1 = l1->next;
-                }
-                // Lấy vị trí các đoạn màu tại List 1 và List 2
-                int l1l = l1->getLeft(), l1r = l1->getRight();
-                int l2l = l2->getLeft(), l2r = l2->getRight();
-
-                /*
-                    Kiểm tra xem 2 đoạn màu có giao nhau không
-                */
-                if (l1r + l2r - l1l - l2l + 1 >= max(l1r,l2r) - min(l1l,l2l) &&
-                    is_same_color(l1->getColor(), l2->getColor())) {
-                    /*
-                        Kiểm tra góc sẵn có với góc mới, nếu không chênh lệch nhiều
-                        thì ta coi như 3 điểm nằm trên 1 cạnh của đa giác
-                    */
-
-                    if (l1->upRight != Point(-1, -1)) {
-
-                        int l0r = l1->upRight.y;
-                        int absI = i - l1->upRight.x;
-                        Point2d p = Point2d(i - absI, l0r);
-
-                        double minGradientRight = max(  gradient(Point2d(i-0.5, l2r-ALPHA_J), p),
-                                                        gradient(Point2d(i+0.5, l2r-ALPHA_J), p));
-                        double maxGradientRight = min(  gradient(Point2d(i-0.5, l2r+ALPHA_J), p),
-                                                        gradient(Point2d(i+0.5, l2r+ALPHA_J), p));
-                        
-                        double newMinGradientRight = min(minGradientRight, l1->getMinGradientRight());
-                        double newMaxGradientRight = max(maxGradientRight, l1->getMaxGradientRight());
-
-                        double jmin = l0r + computeJ(absI, newMinGradientRight);
-                        double jmax = l0r + computeJ(absI, newMaxGradientRight);
-
-                        if (jmin <= jmax) {
-                            l2->setMinGradientRight(newMinGradientRight);
-                            l2->setMaxGradientRight(newMaxGradientRight);
-
-                            eraseColor(Point(i-1, l1r));
-                            l2->upRight = l1->upRight;
-
-                        }
-                        else {
-                            Point2d p = Point2d(i-1, l1r);
-                            minGradientRight = max( gradient(Point2d(i-0.5, l2r-ALPHA_J), p),
-                                                    gradient(Point2d(i+0.5, l2r-ALPHA_J), p));
-                            maxGradientRight = min( gradient(Point2d(i-0.5, l2r+ALPHA_J), p),
-                                                    gradient(Point2d(i+0.5, l2r+ALPHA_J), p));
-                            l2->setMinGradientRight(minGradientRight);
-                            l2->setMaxGradientRight(maxGradientRight);
-
-
-                            l2->upRight = Point(i-1, l1r);
-                        }
-                    }
-                    else {
-                        Point2d p = Point2d(i-1, l1r);
-                        double minGradientRight = max(      gradient(Point2d(i-0.5, l2r-ALPHA_J), p),
-                                                            gradient(Point2d(i+0.5, l2r-ALPHA_J), p));
-                        double maxGradientRight = min(      gradient(Point2d(i-0.5, l2r+ALPHA_J), p),
-                                                            gradient(Point2d(i+0.5, l2r+ALPHA_J), p));
-                        l2->setMinGradientRight(minGradientRight);
-                        l2->setMaxGradientRight(maxGradientRight);
-
-                        l2->upRight = Point(i-1, l1r);
-                    }
-
-                    if(l2l == l2r) break;
-
-                    if (l1->upLeft != Point(-1, -1)) {
-                        int l0l = l1->upLeft.y;
-                        int absI = i - l1->upLeft.x;
-                        Point2d p = Point2d(i - absI, l0l);
-
-                        double minGradientLeft = max(   gradient(Point2d(i-0.5, l2l-ALPHA_J), p),
-                                                        gradient(Point2d(i+0.5, l2l-ALPHA_J), p));
-                        double maxGradientLeft = min(   gradient(Point2d(i-0.5, l2l+ALPHA_J), p),
-                                                        gradient(Point2d(i+0.5, l2l+ALPHA_J), p));
-
-                        double newMinGradientLeft = min(minGradientLeft, l1->getMinGradientLeft());
-                        double newMaxGradientLeft = max(maxGradientLeft, l1->getMaxGradientLeft());
-
-                        double jmin = l0l + computeJ(absI, newMinGradientLeft);
-                        double jmax = l0l + computeJ(absI, newMaxGradientLeft);
-
-                        if (jmin <= jmax ) {
-                            l2->setMinGradientLeft(newMinGradientLeft);
-                            l2->setMaxGradientLeft(newMaxGradientLeft);
-
-                            eraseColor(Point(i-1, l1l));
-                            l2->upLeft = l1->upLeft;
-                        }
-                        else {
-                            p = Point2d(i-1, l1l);
-                            minGradientLeft = max(  gradient(Point2d(i-0.5, l2l-ALPHA_J), p),
-                                                    gradient(Point2d(i+0.5, l2l-ALPHA_J), p));
-                            maxGradientLeft = min(  gradient(Point2d(i-0.5, l2l+ALPHA_J), p),
-                                                    gradient(Point2d(i+0.5, l2l+ALPHA_J), p));
-                            l2->setMinGradientLeft(minGradientLeft);
-                            l2->setMaxGradientLeft(maxGradientLeft);
-
-                            l2->upLeft = Point(i-1, l1l);
-                        }
-
-                    }
-                    else {
-                        Point2d p = Point2d(i-1, l1l);
-                        double minGradientLeft = max(   gradient(Point2d(i-0.5, l2l-ALPHA_J), p),
-                                                        gradient(Point2d(i+0.5, l2l-ALPHA_J), p));
-                        double maxGradientLeft = min(   gradient(Point2d(i-0.5, l2l+ALPHA_J), p),
-                                                        gradient(Point2d(i+0.5, l2l+ALPHA_J), p));
-                        l2->setMinGradientLeft(minGradientLeft);
-                        l2->setMaxGradientLeft(maxGradientLeft);
-
-                        l2->upLeft = Point(i-1, l1l);
-                    }
-
-                    break;
-                }
-                else if (l1->getRight() < l2->getLeft()) {
-                    break;
-                }
-                else if (l1->getLeft() <= l2->getLeft() && l2->getRight() <= l1->getRight()) {
-                    break;
-                }
-                l1 = l1->next;
-            }
-
-        l2 = l2->next;
-    }   
-}
-
-void addColorOfPixelinRow(int i, LinkedListNode *head) {
-    /*
-        Lưu lại màu vào 2 vector Left Right tương ứng với
-        các điểm ở 2 bên của đa giác
-    */
-    LinkedListNode *cur = head;
-    while(cur != NULL) {
-        int l = cur->getLeft(), r = cur->getRight();
-        Vec3b color = cur->getColor();
-        colored(Point(i, l), color);
-        colored(Point(i, r), color);
-
-        cur = cur->next;
     }
 }
-
-void process() {
-    LinkedListNode *l1Head = NULL, *l2Head = NULL;
-    
-
-    for(int i = 0; i < m; ++i) {
-        l2Head = insertLinkedListNode(l2Head, 0, 0, a[i][0].getColor());
-        /*
-            Tìm các đoạn màu của hàng i rồi lưu vào List 2
-            Nếu i = 0 thì phải khởi tạo vị trí đa giác mà chứa đoạn màu
-        */
-
-        for(int j = 1; j < n; ++j) {
-            if (!is_same_color(a[i][j].getColor(),  a[i][j-1].getColor())) {
-                l2Head = insertLinkedListNode(l2Head,j,j, a[i][j].getColor());
-            }
-            else {
-                l2Head->setRight(j);
-            }
-        }
-
-        if (i > 0) {
-            // Cập nhật xem các đoạn màu thuộc đa giác nào
-            updateIndPolygon(i, l1Head, l2Head);
-        }
-
-        addColorOfPixelinRow(i, l2Head);
-
-        /*
-            Giải phóng bộ nhớ List 1 và gán List 2 vào List 1
-        */
-        if (l1Head != NULL)
-            while(l1Head->next != NULL) {
-                LinkedListNode *l1next = l1Head->next;
-                delete l1Head;
-                l1Head = l1next;
-            }
-        l1Head = l2Head;
-        l2Head = NULL;
-
-    }
-
-    cout<< m <<' '<< n <<endl;
-    imwrite("out.jpg", imgwrite);
-    imwrite("out1.png", imgwrite);
-}   
-
 
 int main(int argc, char* argv[]) {
+    TriangleImage triangleImg;
+    string imageName;
+    Mat inImg, outImg;
 
-    imageName = argv[1];
-    freopen("out.txt", "w", stdout);
-
-    init();
-    process();
+    readImage(inImg, argv[1]);
+    triangleImg.process(inImg, outImg);
+    imwrite(argv[2], outImg);
 
     return 0;
 }
