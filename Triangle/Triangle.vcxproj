@@ -129,7 +129,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ImageStructure.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Side.cpp" />
+    <ClCompile Include="Threshold.cpp" />
+    <ClCompile Include="TriangleImage.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ImageStructure.h" />
+    <ClInclude Include="Node.h" />
+    <ClInclude Include="Side.h" />
+    <ClInclude Include="Threshold.h" />
+    <ClInclude Include="TriangleImage.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
