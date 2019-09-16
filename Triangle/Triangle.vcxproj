@@ -131,6 +131,7 @@
   <ItemGroup>
     <ClCompile Include="ImageStructure.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Node.cpp" />
     <ClCompile Include="Side.cpp" />
     <ClCompile Include="Threshold.cpp" />
     <ClCompile Include="TriangleImage.cpp" />
