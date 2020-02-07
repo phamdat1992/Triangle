@@ -34,6 +34,12 @@ public:
 		this->x = p->x;
 		this->y = p->y;
 	}
+
+	void assign(int x, int y)
+	{
+		this->x = x;
+		this->y = y;
+	}
 };
 
 class ColorNode
@@ -103,6 +109,18 @@ public:
 
 		this->p1.assign(p1);
 		this->p2.assign(p2);
+	}
+
+	void setEdge(int currentImageId, int pNext, double hsg, bool isMin, int x1, int y1, int x2, int y2)
+	{
+		this->flag = currentImageId;
+		this->pNext = pNext;
+
+		this->hsg = hsg;
+		this->isMin = isMin;
+
+		this->p1.assign(x1, y1);
+		this->p2.assign(x2, y2);
 	}
 };
 
@@ -490,14 +508,6 @@ int main(int argc, char* argv[])
 			else
 			{
 				idRightUp = f1[idLeftDown].linkRightUp;
-				for (int j = idLeftUp; j <= idRightUp; ++j)
-				{
-					if (cc1[j].color == f1[idLeftDown].color)
-					{
-
-					}
-				}
-			
 				if (f1[idLeftDown].linkRightUp == -1)
 				{
 					idRightDown = cc1[idLeftUp].LinkRightDown;
@@ -505,6 +515,32 @@ int main(int argc, char* argv[])
 				else
 				{
 					idRightDown = idLeftDown;
+				}
+
+				for (int j = idLeftUp + 1, indexCur = cc1[idLeftUp].edgeID; j <= idRightUp; ++j)
+				{
+					if (cc1[j].color == f1[idLeftDown].color)
+					{
+						while (edgeStack.getEdge(indexCur)->pNext != -1)
+						{
+							indexCur = edgeStack.getEdge(indexCur)->pNext;
+						}
+
+						int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+						edgeStack.getEdge(newEdgeId)->setEdge(
+							currentImageId,
+							cc1[j].edgeID,
+							((double)cc1[j].l - cc1[j - 1].r) / ((double)EPS),
+							false,
+							cc1[j - 1].r,
+							row -2,
+							cc1[j].l,
+							row - 2
+						);
+
+						edgeStack.getEdge(indexCur)->pNext = newEdgeId;
+					}
+
 				}
 				
 				for (int j = idLeftDown; j <= idRightDown; ++j)
@@ -630,9 +666,9 @@ int main(int argc, char* argv[])
 		// free unused edge
 		for (int i = 0; i <= lenc1; ++i)
 		{
-			while (cc1[i].edgeID == -1)
+			while (cc1[i].edgeID != -1)
 			{
-				int cur = edgeStack.getEdge(cur)->pNext;
+				int cur = edgeStack.getEdge(cc1[i].edgeID)->pNext;
 				edgeStack.addEdge(cc1[i].edgeID, currentImageId);
 				cc1[i].edgeID = cur;
 			}
