@@ -127,6 +127,7 @@ public:
 		this->linkLeftDown = node->linkLeftDown;
 		this->LinkRightDown = node->LinkRightDown;
 		this->color = this->color;
+	}
 };
 
 class EdgeStructure
@@ -468,44 +469,51 @@ int main(int argc, char* argv[])
 		*/
 
 		int lenc2 = len1;
-		for (int i = 0, idL, idR; i <= len1; ++i)
+		for (int idLeftDown = 0, idLeftUp, idRightUp, idRightDown; idLeftDown <= len1; ++idLeftDown)
 		{
-			idL = f1[i].linkLeftUp;
-			cc2[i].setColorNode(&f1[i]);
+			idLeftUp = f1[idLeftDown].linkLeftUp;
+			cc2[idLeftDown].setColorNode(&f1[idLeftDown]);
 
-			if (idL == -1)
+			if (idLeftUp == -1)
 			{
 				// add edge
-				cc2[i].edgeID = edgeStack.getEdgeFromStack(currentImageId);
-				edgeStack.getEdge(cc2[i].edgeID)->setEdge(
+				cc2[idLeftDown].edgeID = edgeStack.getEdgeFromStack(currentImageId);
+				edgeStack.getEdge(cc2[idLeftDown].edgeID)->setEdge(
 					currentImageId,
 					-1,
-					((double)f1[i].pR.x - f1[i].pL.x) / ((double)EPS),
+					((double)f1[idLeftDown].pR.x - f1[idLeftDown].pL.x) / ((double)EPS),
 					false,
-					&f1[i].pL,
-					&f1[i].pR
+					&f1[idLeftDown].pL,
+					&f1[idLeftDown].pR
 				);
 			} 
 			else
 			{
-				idR = f1[i].linkRightUp;
-				for (int j = idL; j <= idR; ++j)
+				idRightUp = f1[idLeftDown].linkRightUp;
+				for (int j = idLeftUp; j <= idRightUp; ++j)
 				{
-					if (cc1[j].color == f1[i].color)
+					if (cc1[j].color == f1[idLeftDown].color)
 					{
 
 					}
 				}
 			
-				// if (f1[i].linkRightUp == -1)
-				idR = cc1[idL].LinkRightDown;
-				for (int j = i; j <= idR; ++j)
+				if (f1[idLeftDown].linkRightUp == -1)
 				{
-					if (cc1[idL].color != f1[j].color)
+					idRightDown = cc1[idLeftUp].LinkRightDown;
+				}
+				else
+				{
+					idRightDown = idLeftDown;
+				}
+				
+				for (int j = idLeftDown; j <= idRightDown; ++j)
+				{
+					if (cc1[idLeftUp].color != f1[j].color)
 					{
 						// add edge
 						cc2[j].edgeID = edgeStack.getEdgeFromStack(currentImageId);
-						edgeStack.getEdge(cc2[i].edgeID)->setEdge(
+						edgeStack.getEdge(cc2[j].edgeID)->setEdge(
 							currentImageId,
 							-1,
 							((double)f1[j].pR.x - f1[j].pL.x) / ((double)EPS),
@@ -518,9 +526,9 @@ int main(int argc, char* argv[])
 					{
 						if (f1[j].pL.isVertice)
 						{
-							for (; cc1[idL].edgeID != -1; )
+							for (; cc1[idLeftUp].edgeID != -1; )
 							{
-								Edge* curEdge = edgeStack.getEdge(cc1[idL].edgeID);
+								Edge* curEdge = edgeStack.getEdge(cc1[idLeftUp].edgeID);
 								double hsg = ((double)f1[j].pL.x - curEdge->p1.x) / ((double)f1[j].pL.y - curEdge->p1.y);
 								if ((curEdge->isMin && hsg >= curEdge->hsg) || (!curEdge->isMin && hsg <= curEdge->hsg))
 								{
@@ -532,8 +540,8 @@ int main(int argc, char* argv[])
 										)
 									);
 
-									int curEdgeId = cc1[idL].edgeID;
-									cc1[idL].edgeID = curEdge->pNext;
+									int curEdgeId = cc1[idLeftUp].edgeID;
+									cc1[idLeftUp].edgeID = curEdge->pNext;
 									edgeStack.addEdge(curEdgeId, currentImageId);
 								}
 								else
@@ -542,13 +550,13 @@ int main(int argc, char* argv[])
 
 									edgeStack.getEdge(newEdgeId)->setEdge(
 										currentImageId,
-										cc1[idL].edgeID,
+										cc1[idLeftUp].edgeID,
 										((double)f1[j].pL.x - curEdge->p1.x) / ((double)f1[j].pL.y - curEdge->p1.y + EPS),
 										true,
 										&f1[j].pL,
 										&curEdge->p1
 									);
-									cc1[idL].edgeID = newEdgeId;
+									cc1[idLeftUp].edgeID = newEdgeId;
 
 									break;
 								}
@@ -557,9 +565,9 @@ int main(int argc, char* argv[])
 
 						if (f1[j].pR.isVertice)
 						{
-							for (; cc1[idL].edgeID != -1; )
+							for (; cc1[idLeftUp].edgeID != -1; )
 							{
-								Edge* curEdge = edgeStack.getEdge(cc1[idL].edgeID);
+								Edge* curEdge = edgeStack.getEdge(cc1[idLeftUp].edgeID);
 								double hsg = ((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y);
 								if ((curEdge->isMin && hsg >= curEdge->hsg) || (!curEdge->isMin && hsg <= curEdge->hsg))
 								{
@@ -571,8 +579,8 @@ int main(int argc, char* argv[])
 										)
 									);
 
-									int curEdgeId = cc1[idL].edgeID;
-									cc1[idL].edgeID = curEdge->pNext;
+									int curEdgeId = cc1[idLeftUp].edgeID;
+									cc1[idLeftUp].edgeID = curEdge->pNext;
 									edgeStack.addEdge(curEdgeId, currentImageId);
 								}
 								else
@@ -594,27 +602,41 @@ int main(int argc, char* argv[])
 										int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
 										edgeStack.getEdge(newEdgeId)->setEdge(
 											currentImageId,
-											cc1[idL].edgeID,
+											cc1[idLeftUp].edgeID,
 											((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y + EPS),
 											true,
 											&f1[j].pL,
 											&curEdge->p1
 										);
-										cc1[idL].edgeID = newEdgeId;
+										cc1[idLeftUp].edgeID = newEdgeId;
 									}
 
 									break;
 								}
 							}
 						}
+						else
+						{
+							cc2[j].edgeID = cc1[idLeftUp].edgeID;
+							cc1[idLeftUp].edgeID = -1;
+						}
 					}
 				}
 
-				i = idR;
+				idLeftDown = idRightDown;
 			}
 		}
 
 		// free unused edge
+		for (int i = 0; i <= lenc1; ++i)
+		{
+			while (cc1[i].edgeID == -1)
+			{
+				int cur = edgeStack.getEdge(cur)->pNext;
+				edgeStack.addEdge(cc1[i].edgeID, currentImageId);
+				cc1[i].edgeID = cur;
+			}
+		}
 
 		swap(f1, f2);
 		swap(l1, l2);
