@@ -28,6 +28,12 @@ public:
 		this->x = -1;
 		this->y = -1;
 	}
+
+	void assign(Point2D* p)
+	{
+		this->x = p->x;
+		this->y = p->y;
+	}
 };
 
 class ColorNode
@@ -35,7 +41,10 @@ class ColorNode
 public:
 	int l, r;
 	int color;
-	Point2D pl, pr;
+	int linkLeftUp, linkLeftDown;
+	int linkRightUp, LinkRightDown;
+
+	Point2D pL, pR;
 
 	ColorNode(int il, int ir, int ic)
 	{
@@ -46,7 +55,24 @@ public:
 
 	ColorNode()
 	{
+	}
+};
 
+class Triangle
+{
+public:
+	Point2D p1, p2, p3;
+
+	Triangle(Point2D x, Point2D y, Point2D z)
+	{
+		this->p1.x = x.x;
+		this->p1.y = x.y;
+		
+		this->p2.x = y.x;
+		this->p2.y = y.y;
+
+		this->p3.x = z.x;
+		this->p3.y = z.y;
 	}
 };
 
@@ -56,19 +82,100 @@ public:
 	Point2D p1, p2;
 	double hsg;
 	bool isMin;
+	int pNext;
+	int flag;
 
 	Edge()
 	{
+		this->flag = -1;
+		this->pNext = -1;
 		this->isMin = false;
 		this->hsg = 0.0;
+	}
+
+	void setEdge(int currentImageId, int pNext, double hsg, bool isMin, Point2D* p1, Point2D* p2)
+	{
+		this->flag = currentImageId;
+		this->pNext = pNext;
+
+		this->hsg = hsg;
+		this->isMin = isMin;
+
+		this->p1.assign(p1);
+		this->p2.assign(p2);
 	}
 };
 
 class EdgeNode
 {
 public:
-	list<Edge> edges;
+	int edgeID;
 	int l, r;
+	int color;
+	int linkLeftDown, LinkRightDown;
+
+	EdgeNode()
+	{
+		this->edgeID = -1;
+		this->l = this->r = this->color = -1;
+	}
+
+	void setColorNode(ColorNode* node)
+	{
+		this->l = node->l;
+		this->r = node->r;
+		this->linkLeftDown = node->linkLeftDown;
+		this->LinkRightDown = node->LinkRightDown;
+		this->color = this->color;
+};
+
+class EdgeStructure
+{
+public:
+	int headStack;
+	Edge* stackEdge;
+
+	void init(int width)
+	{
+		this->headStack = 0;
+		this->stackEdge = new Edge[width];
+	}
+
+	~EdgeStructure()
+	{
+		delete[] stackEdge;
+	}
+
+	int getEdgeFromStack(int currentImageId)
+	{
+		int edgeId = headStack;
+
+		if (stackEdge[headStack].flag != currentImageId)
+		{
+			++headStack;
+		}
+		else
+		{
+			headStack = stackEdge[headStack].pNext;
+		}
+
+		stackEdge[edgeId].flag = currentImageId;
+		stackEdge[edgeId].pNext = -1;
+
+		return edgeId;
+	}
+
+	Edge* getEdge(int edgeId)
+	{
+		return &this->stackEdge[edgeId];
+	}
+
+	void addEdge(int edgeId, int currentImageId)
+	{
+		stackEdge[edgeId].flag = currentImageId;
+		stackEdge[edgeId].pNext = headStack;
+		headStack = edgeId;
+	}
 };
 
 void readImage(Mat& image, const string& path)
@@ -91,36 +198,48 @@ int main(int argc, char* argv[])
 	readImage(inImg, "./cluster.bmp");
 	outImg = inImg.clone();
 
+	list<Triangle> triangles;
 	ColorNode* f1 = new ColorNode[inImg.cols];
 	ColorNode* f2 = new ColorNode[inImg.cols];
-	
+
+	EdgeNode* cc1 = new EdgeNode[inImg.cols];
+	EdgeNode* cc2 = new EdgeNode[inImg.cols];
+
+	EdgeStructure edgeStack;
+	edgeStack.init(inImg.cols);
+
+	int currentImageId = 0;
+	int lenc1 = 0, lenc2 = 0;
+
 	ColorNode* l1 = f1;
 	ColorNode* l2 = f2;
 
-	f1->pl.x = f1->pl.y = -1;
-	f1->pr.x = f1->pr.y = -1;
+	f1->pL.x = f1->pL.y = -1;
+	f1->pR.x = f1->pR.y = -1;
 	f1->color = -1;
 
 	for (int row = 0; row < inImg.rows; ++row)
 	{
 		log << "row " << row << endl;
+		/* 
 		if (row == 935)
 		{
 			cout << "test";
-			//return 0;
 		}
+		*/
 		const uchar* ptr = inImg.ptr(row);
 
 		l2 = f2;
 		l2->l = l2->r = 0;
 		l2->color = *ptr;
-		l2->pl.x = l2->pr.x = 0;
-		l2->pl.y = l2->pr.y = row;
-		l2->pl.gl = numeric_limits<double>::lowest();
-		l2->pl.gr = numeric_limits<double>::max();
-		l2->pr.gl = numeric_limits<double>::lowest();
-		l2->pr.gr = numeric_limits<double>::max();
-		l2->pl.isVertice = l2->pr.isVertice = true;
+		l2->pL.x = l2->pR.x = 0;
+		l2->pL.y = l2->pR.y = row;
+		l2->pL.gl = numeric_limits<double>::lowest();
+		l2->pL.gr = numeric_limits<double>::max();
+		l2->pR.gl = numeric_limits<double>::lowest();
+		l2->pR.gr = numeric_limits<double>::max();
+		l2->pL.isVertice = l2->pR.isVertice = true;
+		l2->linkLeftUp = l2->linkLeftDown = l2->linkRightUp = l2->LinkRightDown = -1;
 
 		for (int col = 0; col < inImg.cols; ++col)
 		{
@@ -129,20 +248,21 @@ int main(int argc, char* argv[])
 			{
 				++l2;
 				l2->l = col;
-				l2->pl.x = col;
-				l2->pl.y = row;
+				l2->pL.x = col;
+				l2->pL.y = row;
 				l2->color = cc;
 				
-				l2->pl.gl = numeric_limits<double>::lowest();
-				l2->pl.gr = numeric_limits<double>::max();
-				l2->pr.gl = numeric_limits<double>::lowest();
-				l2->pr.gr = numeric_limits<double>::max();
-				l2->pl.isVertice = l2->pr.isVertice = true;
+				l2->pL.gl = numeric_limits<double>::lowest();
+				l2->pL.gr = numeric_limits<double>::max();
+				l2->pR.gl = numeric_limits<double>::lowest();
+				l2->pR.gr = numeric_limits<double>::max();
+				l2->pL.isVertice = l2->pR.isVertice = true;
+				l2->linkLeftUp = l2->linkLeftDown = l2->linkRightUp = l2->LinkRightDown = -1;
 			}
 
 			l2->r = col;
-			l2->pr.x = col;
-			l2->pr.y = row;
+			l2->pR.x = col;
+			l2->pR.y = row;
 
 			ptr += 3;
 		}
@@ -150,21 +270,23 @@ int main(int argc, char* argv[])
 		int len1 = l1 - f1;
 		int len2 = l2 - f2;
 
+		/*
 		log << "l1" << endl;
 		for (int i1 = 0; i1 <= len1; ++i1)
 		{
 			log << f1[i1].l << " " << f1[i1].r << endl;
-			log << f1[i1].pl.x << " " << f1[i1].pl.y << " " << f1[i1].pl.gl << " " << f1[i1].pl.gr << endl;
-			log << f1[i1].pr.x << " " << f1[i1].pr.y << " " << f1[i1].pr.gl << " " << f1[i1].pr.gr << endl;
+			log << f1[i1].pL.x << " " << f1[i1].pL.y << " " << f1[i1].pL.gl << " " << f1[i1].pL.gr << endl;
+			log << f1[i1].pR.x << " " << f1[i1].pR.y << " " << f1[i1].pR.gl << " " << f1[i1].pR.gr << endl;
 		}
 
 		log << "l2" << endl;
 		for (int i2 = 0; i2 <= len2; ++i2)
 		{
 			log << f2[i2].l << " " << f2[i2].r << endl;
-			log << f2[i2].pl.x << " " << f2[i2].pl.y << " " << f2[i2].pl.gl << " " << f2[i2].pl.gr << endl;
-			log << f2[i2].pr.x << " " << f2[i2].pr.y << " " << f2[i2].pr.gl << " " << f2[i2].pr.gr << endl;
+			log << f2[i2].pL.x << " " << f2[i2].pL.y << " " << f2[i2].pL.gl << " " << f2[i2].pL.gr << endl;
+			log << f2[i2].pR.x << " " << f2[i2].pR.y << " " << f2[i2].pR.gl << " " << f2[i2].pR.gr << endl;
 		}
+		*/
 
 		for (int i1 = 0, i2 = 0; i1 <= len1 && i2 <= len2; ++i2)
 		{
@@ -173,21 +295,24 @@ int main(int argc, char* argv[])
 
 			if (i1 <= len1 && i2 <= len2 && f1[i1].l <= f2[i2].r && f2[i2].l <= f1[i1].r)
 			{
-				if (f1[i1].color == f2[i2].color && f1[i1].pl.x != -1 && f1[i1].pl.y != -1)
+				if (f1[i1].color == f2[i2].color && f1[i1].pL.x != -1 && f1[i1].pL.y != -1)
 				{
-					f2[i2].pl.x = f1[i1].pl.x;
-					f2[i2].pl.y = f1[i1].pl.y;
+					f2[i2].pL.x = f1[i1].pR.x;
+					f2[i2].pL.y = f1[i1].pR.y;
 
-					if (f1[i1].pl.x != f1[i1].l || f1[i1].pl.y != row - 1)
+					f2[i2].linkLeftUp = i1;
+					f1[i1].linkLeftDown = i2;
+
+					if (f1[i1].pL.x != f1[i1].l || f1[i1].pL.y != row - 1)
 					{
-						f1[i1].pl.isVertice = false;
+						f1[i1].pL.isVertice = false;
 					}
 
-					double dx = (double)f2[i2].l - (double)f2[i2].pl.x;
-					double dy = (double)row - (double)f2[i2].pl.y;
+					double dx = (double)f2[i2].l - (double)f2[i2].pL.x;
+					double dy = (double)row - (double)f2[i2].pL.y;
 					double da = dx / dy;
 
-					if (f1[i1].pl.gl <= da && da <= f1[i1].pl.gr)
+					if (f1[i1].pL.gl <= da && da <= f1[i1].pL.gr)
 					{
 						double dm = (dy - ALPHA_J >= 0) ? (dy - ALPHA_J) : 0;
 
@@ -202,24 +327,24 @@ int main(int argc, char* argv[])
 						double fmax = max(ss1, ss2);
 
 
-						f2[i2].pl.gl = max(f1[i1].pl.gl, fmin);
-						f2[i2].pl.gr = min(f1[i1].pl.gr, fmax);
+						f2[i2].pL.gl = max(f1[i1].pL.gl, fmin);
+						f2[i2].pL.gr = min(f1[i1].pL.gr, fmax);
 					}
 					else 
 					{
-						f2[i2].pl.gl = 1.0;
-						f2[i2].pl.gr = -1.0;
+						f2[i2].pL.gl = 1.0;
+						f2[i2].pL.gr = -1.0;
 					}
 
-					if (f2[i2].pl.gl > f2[i2].pl.gr)
+					if (f2[i2].pL.gl > f2[i2].pL.gr)
 					{
-						f2[i2].pl.x = f1[i1].l;
-						f2[i2].pl.y = row - 1;
+						f2[i2].pL.x = f1[i1].l;
+						f2[i2].pL.y = row - 1;
 
-						f1[i1].pl.isVertice = true;
+						f1[i1].pL.isVertice = true;
 
-						dx = (double)f2[i2].l - (double)f2[i2].pl.x;
-						dy = (double)row - (double)f2[i2].pl.y;
+						dx = (double)f2[i2].l - (double)f2[i2].pL.x;
+						dy = (double)row - (double)f2[i2].pL.y;
 
 						double dm = (dy - ALPHA_J >= 0) ? (dy - ALPHA_J) : 0;
 
@@ -232,8 +357,8 @@ int main(int argc, char* argv[])
 						ss2 = max((dx + ALPHA_J) / (dm + EPS), (dx + ALPHA_J) / (dy + ALPHA_J + EPS));
 
 						double fmax = max(ss1, ss2);
-						f2[i2].pl.gl = fmin;
-						f2[i2].pl.gr = fmax;
+						f2[i2].pL.gl = fmin;
+						f2[i2].pL.gr = fmax;
 					}
 
 					++i1;
@@ -248,21 +373,23 @@ int main(int argc, char* argv[])
 
 			if (i1 >= 0 && i2 >= 0 && f1[i1].r >= f2[i2].l && f2[i2].r >= f1[i1].l)
 			{
-				if (f1[i1].color == f2[i2].color && f1[i1].pr.x != -1 && f1[i1].pr.y != -1)
+				if (f1[i1].color == f2[i2].color && f1[i1].pR.x != -1 && f1[i1].pR.y != -1)
 				{
-					f2[i2].pr.x = f1[i1].pr.x;
-					f2[i2].pr.y = f1[i1].pr.y;
+					f2[i2].pR.x = f1[i1].pR.x;
+					f2[i2].pR.y = f1[i1].pR.y;
+					f2[i2].linkRightUp = i1;
+					f1[i1].LinkRightDown = i2;
 
-					double dx = (double)f2[i2].r - (double)f2[i2].pr.x;
-					double dy = (double)row - (double)f2[i2].pr.y;
+					double dx = (double)f2[i2].r - (double)f2[i2].pR.x;
+					double dy = (double)row - (double)f2[i2].pR.y;
 					double da = dx / dy;
 
-					if (f1[i1].pr.x != f1[i1].r || f1[i1].pr.y != row - 1)
+					if (f1[i1].pR.x != f1[i1].r || f1[i1].pR.y != row - 1)
 					{
-						f1[i1].pr.isVertice = false;
+						f1[i1].pR.isVertice = false;
 					}
 
-					if (f1[i1].pr.gl <= da && da <= f1[i1].pr.gr)
+					if (f1[i1].pR.gl <= da && da <= f1[i1].pR.gr)
 					{
 						double dm = (dy - ALPHA_J >= 0) ? (dy - ALPHA_J) : 0;
 
@@ -276,24 +403,24 @@ int main(int argc, char* argv[])
 
 						double fmax = max(ss1, ss2);
 
-						f2[i2].pr.gl = max(f1[i1].pr.gl, fmin);
-						f2[i2].pr.gr = min(f1[i1].pr.gr, fmax);
+						f2[i2].pR.gl = max(f1[i1].pR.gl, fmin);
+						f2[i2].pR.gr = min(f1[i1].pR.gr, fmax);
 					}
 					else
 					{
-						f2[i2].pr.gl = 1.0;
-						f2[i2].pr.gr = -1.0;
+						f2[i2].pR.gl = 1.0;
+						f2[i2].pR.gr = -1.0;
 					}
 
-					if (f2[i2].pr.gl > f2[i2].pr.gr)
+					if (f2[i2].pR.gl > f2[i2].pR.gr)
 					{
-						f2[i2].pr.x = f1[i1].r;
-						f2[i2].pr.y = row - 1;
+						f2[i2].pR.x = f1[i1].r;
+						f2[i2].pR.y = row - 1;
 
-						f1[i1].pr.isVertice = true;
+						f1[i1].pR.isVertice = true;
 
-						dx = (double)f2[i2].r - (double)f2[i2].pr.x;
-						dy = (double)row - (double)f2[i2].pr.y;
+						dx = (double)f2[i2].r - (double)f2[i2].pR.x;
+						dy = (double)row - (double)f2[i2].pR.y;
 
 						double dm = (dy - ALPHA_J >= 0) ? (dy - ALPHA_J) : 0;
 
@@ -306,8 +433,8 @@ int main(int argc, char* argv[])
 						ss2 = max((dx + ALPHA_J) / (dm + EPS), (dx + ALPHA_J) / (dy + ALPHA_J + EPS));
 
 						double fmax = max(ss1, ss2);
-						f2[i2].pr.gl = fmin;
-						f2[i2].pr.gr = fmax;
+						f2[i2].pR.gl = fmin;
+						f2[i2].pR.gr = fmax;
 					}
 
 					--i1;
@@ -315,14 +442,11 @@ int main(int argc, char* argv[])
 			}
 		}
 
+		// print keypoints
+		/*
 		for (int i = 0; i <= len1; ++i)
 		{
-			if (f1[i].color != 61)
-			{
-				continue;
-			}
-
-			if (f1[i].pl.isVertice)
+			if (f1[i].pL.isVertice)
 			{
 				cout << f1[i].l << " " << row - 1 << endl;
 
@@ -332,7 +456,7 @@ int main(int argc, char* argv[])
 				circle(outImg, centerCircle, radius, colorCircle, FILLED);
 			}
 
-			if (f1[i].pr.isVertice)
+			if (f1[i].pR.isVertice)
 			{
 				cout << f1[i].r << " " << row - 1 << endl;
 				Point centerCircle(f1[i].r, row - 1);
@@ -341,13 +465,172 @@ int main(int argc, char* argv[])
 				circle(outImg, centerCircle, radius, colorCircle, FILLED);
 			}
 		}
+		*/
+
+		int lenc2 = len1;
+		for (int i = 0, idL, idR; i <= len1; ++i)
+		{
+			idL = f1[i].linkLeftUp;
+			cc2[i].setColorNode(&f1[i]);
+
+			if (idL == -1)
+			{
+				// add edge
+				cc2[i].edgeID = edgeStack.getEdgeFromStack(currentImageId);
+				edgeStack.getEdge(cc2[i].edgeID)->setEdge(
+					currentImageId,
+					-1,
+					((double)f1[i].pR.x - f1[i].pL.x) / ((double)EPS),
+					false,
+					&f1[i].pL,
+					&f1[i].pR
+				);
+			} 
+			else
+			{
+				idR = f1[i].linkRightUp;
+				for (int j = idL; j <= idR; ++j)
+				{
+					if (cc1[j].color == f1[i].color)
+					{
+
+					}
+				}
+			
+				// if (f1[i].linkRightUp == -1)
+				idR = cc1[idL].LinkRightDown;
+				for (int j = i; j <= idR; ++j)
+				{
+					if (cc1[idL].color != f1[j].color)
+					{
+						// add edge
+						cc2[j].edgeID = edgeStack.getEdgeFromStack(currentImageId);
+						edgeStack.getEdge(cc2[i].edgeID)->setEdge(
+							currentImageId,
+							-1,
+							((double)f1[j].pR.x - f1[j].pL.x) / ((double)EPS),
+							false,
+							&f1[j].pL,
+							&f1[j].pR
+						);
+					}
+					else
+					{
+						if (f1[j].pL.isVertice)
+						{
+							for (; cc1[idL].edgeID != -1; )
+							{
+								Edge* curEdge = edgeStack.getEdge(cc1[idL].edgeID);
+								double hsg = ((double)f1[j].pL.x - curEdge->p1.x) / ((double)f1[j].pL.y - curEdge->p1.y);
+								if ((curEdge->isMin && hsg >= curEdge->hsg) || (!curEdge->isMin && hsg <= curEdge->hsg))
+								{
+									triangles.push_back(
+										Triangle(
+											curEdge->p1,
+											curEdge->p2,
+											f1[j].pL
+										)
+									);
+
+									int curEdgeId = cc1[idL].edgeID;
+									cc1[idL].edgeID = curEdge->pNext;
+									edgeStack.addEdge(curEdgeId, currentImageId);
+								}
+								else
+								{
+									int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+
+									edgeStack.getEdge(newEdgeId)->setEdge(
+										currentImageId,
+										cc1[idL].edgeID,
+										((double)f1[j].pL.x - curEdge->p1.x) / ((double)f1[j].pL.y - curEdge->p1.y + EPS),
+										true,
+										&f1[j].pL,
+										&curEdge->p1
+									);
+									cc1[idL].edgeID = newEdgeId;
+
+									break;
+								}
+							}
+						}
+
+						if (f1[j].pR.isVertice)
+						{
+							for (; cc1[idL].edgeID != -1; )
+							{
+								Edge* curEdge = edgeStack.getEdge(cc1[idL].edgeID);
+								double hsg = ((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y);
+								if ((curEdge->isMin && hsg >= curEdge->hsg) || (!curEdge->isMin && hsg <= curEdge->hsg))
+								{
+									triangles.push_back(
+										Triangle(
+											curEdge->p1,
+											curEdge->p2,
+											f1[j].pR
+										)
+									);
+
+									int curEdgeId = cc1[idL].edgeID;
+									cc1[idL].edgeID = curEdge->pNext;
+									edgeStack.addEdge(curEdgeId, currentImageId);
+								}
+								else
+								{
+									{
+										int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+										edgeStack.getEdge(newEdgeId)->setEdge(
+											currentImageId,
+											-1,
+											((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y + EPS),
+											true,
+											&f1[j].pL,
+											&curEdge->p1
+										);
+										cc2[j].edgeID = newEdgeId;
+									}
+
+									{
+										int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+										edgeStack.getEdge(newEdgeId)->setEdge(
+											currentImageId,
+											cc1[idL].edgeID,
+											((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y + EPS),
+											true,
+											&f1[j].pL,
+											&curEdge->p1
+										);
+										cc1[idL].edgeID = newEdgeId;
+									}
+
+									break;
+								}
+							}
+						}
+					}
+				}
+
+				i = idR;
+			}
+		}
+
+		// free unused edge
 
 		swap(f1, f2);
 		swap(l1, l2);
+
+		swap(cc1, cc2);
+		swap(lenc1, lenc2);
 	}
 
 	log.close();
 	imwrite("output.bmp", outImg);
+
+	delete[] f1;
+	delete[] f2;
+
+	delete[] cc1;
+	delete[] cc2;
 
 	return 0;
 }
