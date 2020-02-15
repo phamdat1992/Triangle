@@ -101,14 +101,7 @@ public:
 
 	void setEdge(int currentImageId, int pNext, double hsg, bool isMin, Point2D* p1, Point2D* p2)
 	{
-		this->flag = currentImageId;
-		this->pNext = pNext;
-
-		this->hsg = hsg;
-		this->isMin = isMin;
-
-		this->p1.assign(p1);
-		this->p2.assign(p2);
+		this->setEdge(currentImageId, pNext, hsg, isMin, p1->x, p1->y, p2->x, p2->y);
 	}
 
 	void setEdge(int currentImageId, int pNext, double hsg, bool isMin, int x1, int y1, int x2, int y2)
@@ -144,7 +137,8 @@ public:
 		this->r = node->r;
 		this->linkLeftDown = node->linkLeftDown;
 		this->LinkRightDown = node->LinkRightDown;
-		this->color = this->color;
+		this->color = node->color;
+		this->edgeID = -1;
 	}
 };
 
@@ -240,12 +234,14 @@ int main(int argc, char* argv[])
 	for (int row = 0; row < inImg.rows; ++row)
 	{
 		log << "row " << row << endl;
-		/* 
-		if (row == 935)
+		
+		/*
+		if (row == 349)
 		{
 			cout << "test";
 		}
 		*/
+
 		const uchar* ptr = inImg.ptr(row);
 
 		l2 = f2;
@@ -316,8 +312,8 @@ int main(int argc, char* argv[])
 			{
 				if (f1[i1].color == f2[i2].color && f1[i1].pL.x != -1 && f1[i1].pL.y != -1)
 				{
-					f2[i2].pL.x = f1[i1].pR.x;
-					f2[i2].pL.y = f1[i1].pR.y;
+					f2[i2].pL.x = f1[i1].pL.x;
+					f2[i2].pL.y = f1[i1].pL.y;
 
 					f2[i2].linkLeftUp = i1;
 					f1[i1].linkLeftDown = i2;
@@ -462,13 +458,10 @@ int main(int argc, char* argv[])
 		}
 
 		// print keypoints
-		/*
 		for (int i = 0; i <= len1; ++i)
 		{
 			if (f1[i].pL.isVertice)
 			{
-				cout << f1[i].l << " " << row - 1 << endl;
-
 				Point centerCircle(f1[i].l, row - 1);
 				int radius = 5;
 				Scalar colorCircle(0, 0, 255);
@@ -477,24 +470,36 @@ int main(int argc, char* argv[])
 
 			if (f1[i].pR.isVertice)
 			{
-				cout << f1[i].r << " " << row - 1 << endl;
 				Point centerCircle(f1[i].r, row - 1);
 				int radius = 5;
 				Scalar colorCircle(0, 0, 255);
 				circle(outImg, centerCircle, radius, colorCircle, FILLED);
 			}
 		}
-		*/
-
+		
 		int lenc2 = len1;
+
+		for (int i = 0; i <= lenc1; ++i)
+		{
+			{
+				log << "node id = " << i << endl;
+				log << "color " << cc1[i].color << " left " << cc1[i].l << " right " << cc1[i].r << " left_down " << cc1[i].linkLeftDown << " right_down " << cc1[i].LinkRightDown << endl;
+				log << "edge" << endl;
+				for (int cur = cc1[i].edgeID; cur != -1; cur = edgeStack.getEdge(cur)->pNext)
+				{
+					log << "(" << edgeStack.getEdge(cur)->p1.x << ", " << edgeStack.getEdge(cur)->p2.x << ") ";
+				}
+				log << endl;
+			}
+		}
+
 		for (int idLeftDown = 0, idLeftUp, idRightUp, idRightDown; idLeftDown <= len1; ++idLeftDown)
 		{
 			idLeftUp = f1[idLeftDown].linkLeftUp;
-			cc2[idLeftDown].setColorNode(&f1[idLeftDown]);
-
 			if (idLeftUp == -1)
 			{
 				// add edge
+				cc2[idLeftDown].setColorNode(&f1[idLeftDown]);
 				cc2[idLeftDown].edgeID = edgeStack.getEdgeFromStack(currentImageId);
 				edgeStack.getEdge(cc2[idLeftDown].edgeID)->setEdge(
 					currentImageId,
@@ -517,7 +522,7 @@ int main(int argc, char* argv[])
 					idRightDown = idLeftDown;
 				}
 
-				for (int j = idLeftUp + 1, indexCur = cc1[idLeftUp].edgeID; j <= idRightUp; ++j)
+				for (int j = idLeftUp + 1, indexCur = cc1[idLeftUp].edgeID; j <= idRightUp && indexCur != -1; ++j)
 				{
 					if (cc1[j].color == f1[idLeftDown].color)
 					{
@@ -539,12 +544,20 @@ int main(int argc, char* argv[])
 						);
 
 						edgeStack.getEdge(indexCur)->pNext = newEdgeId;
+						cc1[j].edgeID = -1;
 					}
 
+					log << "join node" << endl;
+					for (int cur = cc1[idLeftUp].edgeID; cur != -1; cur = edgeStack.getEdge(cur)->pNext)
+					{
+						log << "(" << edgeStack.getEdge(cur)->p1.x << ", " << edgeStack.getEdge(cur)->p2.x << ") ";
+					}
+					log << endl;
 				}
 				
 				for (int j = idLeftDown; j <= idRightDown; ++j)
 				{
+					cc2[j].setColorNode(&f1[j]);
 					if (cc1[idLeftUp].color != f1[j].color)
 					{
 						// add edge
@@ -562,9 +575,17 @@ int main(int argc, char* argv[])
 					{
 						if (f1[j].pL.isVertice)
 						{
+							log << "point_left " << "(" << f1[j].pL.x << ", " << f1[j].pL.y << ")" << endl;
+							Point2D bk;
 							for (; cc1[idLeftUp].edgeID != -1; )
 							{
 								Edge* curEdge = edgeStack.getEdge(cc1[idLeftUp].edgeID);
+
+								/*
+								cout << "(" << curEdge->p1.x << ", " << curEdge->p1.y << ")";
+								cout << "(" << curEdge->p2.x << ", " << curEdge->p2.y << ")";
+								*/
+
 								double hsg = ((double)f1[j].pL.x - curEdge->p1.x) / ((double)f1[j].pL.y - curEdge->p1.y);
 								if ((curEdge->isMin && hsg >= curEdge->hsg) || (!curEdge->isMin && hsg <= curEdge->hsg))
 								{
@@ -576,37 +597,110 @@ int main(int argc, char* argv[])
 										)
 									);
 
+									bk.assign(&curEdge->p2);
 									int curEdgeId = cc1[idLeftUp].edgeID;
 									cc1[idLeftUp].edgeID = curEdge->pNext;
 									edgeStack.addEdge(curEdgeId, currentImageId);
 								}
 								else
 								{
-									int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
-
-									edgeStack.getEdge(newEdgeId)->setEdge(
-										currentImageId,
-										cc1[idLeftUp].edgeID,
-										((double)f1[j].pL.x - curEdge->p1.x) / ((double)f1[j].pL.y - curEdge->p1.y + EPS),
-										true,
-										&f1[j].pL,
-										&curEdge->p1
-									);
-									cc1[idLeftUp].edgeID = newEdgeId;
-
+									bk.assign(&curEdge->p1);
 									break;
 								}
+							}
+							
+							{
+								int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+
+								edgeStack.getEdge(newEdgeId)->setEdge(
+									currentImageId,
+									cc1[idLeftUp].edgeID,
+									((double)f1[j].pL.x - bk.x) / ((double)f1[j].pL.y - bk.y + EPS),
+									true,
+									&f1[j].pL,
+									&bk
+								);
+								cc1[idLeftUp].edgeID = newEdgeId;
 							}
 						}
 
 						if (f1[j].pR.isVertice)
 						{
+							log << "point_right " << "(" << f1[j].pR.x << ", " << f1[j].pR.y << ")" << endl;
+
+							int fflag1 = -1;
+							int fflag2 = cc1[idLeftUp].edgeID;
+							for (; fflag2 != -1; )
+							{
+								int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+								Edge* curEdge = edgeStack.getEdge(fflag2);
+								double hsg = ((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y);
+
+								/*
+								cout << "(" << curEdge->p1.x << ", " << curEdge->p1.y << ")";
+								cout << "(" << curEdge->p2.x << ", " << curEdge->p2.y << ")";
+								*/
+
+								if (!curEdge->isMin && hsg > curEdge->hsg)
+								{
+									fflag1 = fflag2;
+									fflag2 = curEdge->pNext;
+								}
+								else
+								{
+									break;
+								}
+							}
+
+							if (fflag1 == -1)
+							{
+								int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+								Edge* curEdge = edgeStack.getEdge(fflag2);
+								edgeStack.getEdge(newEdgeId)->setEdge(
+									currentImageId,
+									-1,
+									((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y + EPS),
+									true,
+									&curEdge->p1,
+									&f1[j].pR
+								);
+								cc2[j].edgeID = newEdgeId;
+							}
+							else
+							{
+								cc2[j].edgeID = cc1[idLeftUp].edgeID;
+
+								int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+								Edge* curEdge = edgeStack.getEdge(fflag1);
+								edgeStack.getEdge(newEdgeId)->setEdge(
+									currentImageId,
+									-1,
+									((double)f1[j].pR.x - curEdge->p2.x) / ((double)f1[j].pR.y - curEdge->p2.y + EPS),
+									true,
+									&curEdge->p2,
+									&f1[j].pL
+								);
+
+								edgeStack.getEdge(fflag1)->pNext = newEdgeId;
+								cc2[j].edgeID = newEdgeId;
+
+								cc1[idLeftUp].edgeID = fflag2;
+							}
+
+							Point2D bk;
 							for (; cc1[idLeftUp].edgeID != -1; )
 							{
 								Edge* curEdge = edgeStack.getEdge(cc1[idLeftUp].edgeID);
+
+								/*
+								cout << "(" << curEdge->p1.x << ", " << curEdge->p1.y << ")";
+								cout << "(" << curEdge->p2.x << ", " << curEdge->p2.y << ")";
+								*/
+
 								double hsg = ((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y);
 								if ((curEdge->isMin && hsg >= curEdge->hsg) || (!curEdge->isMin && hsg <= curEdge->hsg))
 								{
+									bk.assign(&curEdge->p2);
 									triangles.push_back(
 										Triangle(
 											curEdge->p1,
@@ -621,38 +715,36 @@ int main(int argc, char* argv[])
 								}
 								else
 								{
-									{
-										int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
-										edgeStack.getEdge(newEdgeId)->setEdge(
-											currentImageId,
-											-1,
-											((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y + EPS),
-											true,
-											&f1[j].pL,
-											&curEdge->p1
-										);
-										cc2[j].edgeID = newEdgeId;
-									}
-
-									{
-										int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
-										edgeStack.getEdge(newEdgeId)->setEdge(
-											currentImageId,
-											cc1[idLeftUp].edgeID,
-											((double)f1[j].pR.x - curEdge->p1.x) / ((double)f1[j].pR.y - curEdge->p1.y + EPS),
-											true,
-											&f1[j].pL,
-											&curEdge->p1
-										);
-										cc1[idLeftUp].edgeID = newEdgeId;
-									}
-
+									bk.assign(&curEdge->p1);
 									break;
 								}
+							}
+
+							{
+								int newEdgeId = edgeStack.getEdgeFromStack(currentImageId);
+								edgeStack.getEdge(newEdgeId)->setEdge(
+									currentImageId,
+									cc1[idLeftUp].edgeID,
+									((double)f1[j].pR.x - bk.x) / ((double)f1[j].pR.y - bk.y + EPS),
+									true,
+									&f1[j].pR,
+									&bk
+								);
+								edgeStack.getEdge(newEdgeId)->pNext = cc1[idLeftUp].edgeID;
+								cc1[idLeftUp].edgeID = newEdgeId;
 							}
 						}
 						else
 						{
+							/*
+							cout << "join node" << endl;
+							for (int cur = cc1[idLeftUp].edgeID; cur != -1; cur = edgeStack.getEdge(cur)->pNext)
+							{
+								cout << "(" << edgeStack.getEdge(cur)->p1.x << ", " << edgeStack.getEdge(cur)->p2.x << ") ";
+							}
+							cout << endl;
+							*/
+
 							cc2[j].edgeID = cc1[idLeftUp].edgeID;
 							cc1[idLeftUp].edgeID = -1;
 						}
@@ -662,7 +754,7 @@ int main(int argc, char* argv[])
 				idLeftDown = idRightDown;
 			}
 		}
-
+		
 		// free unused edge
 		for (int i = 0; i <= lenc1; ++i)
 		{
@@ -679,6 +771,36 @@ int main(int argc, char* argv[])
 
 		swap(cc1, cc2);
 		swap(lenc1, lenc2);
+	}
+
+	for (Triangle tr : triangles)
+	{
+		line(
+			outImg,
+			Point(tr.p1.x, tr.p1.y),
+			Point(tr.p2.x, tr.p2.y),
+			Scalar(123, 12, 90),
+			2,
+			8
+		);
+
+		line(
+			outImg,
+			Point(tr.p3.x, tr.p3.y),
+			Point(tr.p2.x, tr.p2.y),
+			Scalar(123, 12, 90),
+			2,
+			8
+		);
+
+		line(
+			outImg,
+			Point(tr.p3.x, tr.p3.y),
+			Point(tr.p1.x, tr.p1.y),
+			Scalar(123, 12, 90),
+			2,
+			8
+		);
 	}
 
 	log.close();
