@@ -67,6 +67,8 @@ public:
 
 	ColorNode()
 	{
+		this->linkLeftDown = this->LinkRightDown = -1;
+		this->linkLeftUp = this->linkRightUp = -1;
 	}
 };
 
