@@ -553,7 +553,7 @@ int main(int argc, char* argv[])
 							cc1[j].edgeID,
 							((double)cc1[j].l - cc1[fkc].r) / ((double)EPS),
 							false,
-							cc1[j - 1].r,
+							cc1[fkc].r,
 							row -2,
 							cc1[j].l,
 							row - 2
