@@ -1,8 +1,0 @@
-﻿  main.cpp
-C:\Projects\Triangle\Triangle\main.cpp(289,12): warning C4244: 'initializing': conversion from '__int64' to 'int', possible loss of data
-C:\Projects\Triangle\Triangle\main.cpp(290,12): warning C4244: 'initializing': conversion from '__int64' to 'int', possible loss of data
-  Generating code
-  Previous IPDB not found, fall back to full compilation.
-  All 439 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
-  Finished generating code
-  Triangle.vcxproj -> C:\Projects\Triangle\x64\Release\Triangle.exe
